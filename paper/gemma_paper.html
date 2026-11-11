@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Knowing When Not to Patch</title>
+<style>
+  :root{--ink:#1a1a1a;--mut:#555;--rule:#ccc;--accent:#7a1f2b;}
+  *{box-sizing:border-box;}
+  body{font-family:"Palatino Linotype","Book Antiqua",Georgia,serif;color:var(--ink);
+       max-width:860px;margin:0 auto;padding:56px 40px 96px;line-height:1.5;font-size:16px;}
+  h1{font-size:28px;line-height:1.2;margin:0 0 6px;font-weight:600;letter-spacing:.2px;}
+  .sub{color:var(--mut);font-style:italic;margin:0 0 4px;font-size:15px;}
+  .meta{color:var(--mut);font-size:13px;border-bottom:1px solid var(--rule);padding-bottom:16px;margin-bottom:24px;}
+  h2{font-size:18px;margin:30px 0 8px;border-bottom:1px solid var(--rule);padding-bottom:3px;}
+  h3{font-size:15px;margin:20px 0 6px;color:var(--accent);}
+  p{margin:0 0 12px;text-align:justify;}
+  .abstract{background:#faf7f2;border:1px solid #e6ddcf;border-left:3px solid var(--accent);
+            padding:16px 20px;margin:0 0 10px;font-size:15px;}
+  .abstract b{font-variant:small-caps;letter-spacing:.5px;}
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:14px;}
+  th,td{border:1px solid var(--rule);padding:5px 10px;text-align:left;}
+  th{background:#f4f1ec;}
+  code{font-family:"SF Mono",Menlo,Consolas,monospace;font-size:13px;background:#f2f2f2;padding:1px 4px;border-radius:3px;}
+  figure{margin:20px 0;text-align:center;}
+  figure img{max-width:100%;border:1px solid var(--rule);}
+  figcaption{color:var(--mut);font-size:13px;margin-top:6px;}
+  .refs{font-size:13px;line-height:1.45;}
+  .refs p{text-indent:-22px;padding-left:22px;text-align:left;}
+  ul{margin:0 0 12px;padding-left:22px;}
+  li{margin:3px 0;}
+  em.tag{color:var(--accent);font-style:normal;font-weight:600;}
+  @media print{body{padding:0;font-size:11pt;max-width:none;} h1{font-size:20pt;} a{color:inherit;text-decoration:none;}}
+</style>
+</head>
+<body>
+
+<h1>Knowing When Not to Patch: Selective Patch Acceptance for a Small Local Code Agent</h1>
+<p class="sub">Gemma 4 Developer Agent — Paper Track submission</p>
+<p class="meta">Draft, 2026-11-05. All numbers are from runs on disk; all arXiv citations were verified against arxiv.org (title + first author), except Farquhar 2024 (<i>Nature</i>) and Li 2022 (<i>Science</i>), both well-known venue papers.</p>
+
+<div class="abstract">
+<p>Small, locally-runnable language models are attractive as software-engineering agents because they are cheap and private, but they fail most repository-level bug-fix tasks while still emitting a confident-looking patch. Running Google's Gemma&nbsp;4&nbsp;E4B (a 4-bit-quantized, locally-servable model) as an autonomous agent on 129 SWE-bench-style bug-fix tasks, it produces a non-empty patch on 115 of 129 tasks yet resolves only 12 (9.3%). Two tasks are satisfied by an <em>empty</em> patch — the hidden test passes with no change — so we exclude them, leaving 127 tasks on which the agent genuinely resolves 11 (8.7%) per seed. We ask whether the agent can tell its good patches from its bad ones <em>without</em> the hidden tests, using only signals it computes itself: diff shape, run-trace behavior, and cross-seed agreement. Across eight seeds (1,016 runs) these signals rank correct patches above incorrect ones — cross-seed agreement is strongest (AUROC 0.840, 95% CI [0.745, 0.924]); patch size alone is near chance (0.614). But a deployable high-precision gate is out of reach at this data scale: a 90%-precision target is unreachable even for an oracle, while a 30%-precision target yields a held-out rule accepting ~14% of tasks at ~33% precision (≈3.8× base rate). A 12B model solves <em>different</em> bugs than E4B (union 22/127 vs 17 for either alone) — the two are complementary — but because the small model confidently accepts so little, routing does not save compute at this scale. We release the full labeled trace dataset.</p>
+</div>
+
+<h2>1. Introduction</h2>
+<p>A coding agent that silently submits a wrong patch is worse than one that says &ldquo;I am not sure.&rdquo; As small local models (one workstation GPU, no API, no data egress) are proposed for autonomous software maintenance, this failure mode becomes acute: the model is weak enough to be wrong most of the time, yet fluent enough to always produce something that <em>looks</em> like a fix.</p>
+<p>We quantify this with Gemma&nbsp;4&nbsp;E4B on a 129-task SWE-bench-style harness: <b>115/129 non-empty patches, 12/129 correct.</b> The agent is, precisely, confidently wrong. The question is the <em>selective prediction</em> question for a code agent: can it abstain on the patches it will likely get wrong, so what it submits is reliable, using only information available at inference time?</p>
+<p>Contributions: (1) an empirical characterization of a small local SWE agent's confidently-wrong failure mode, with seed-dependence measured over eight samples; (2) a lightweight selective-acceptance detector from three signal families — diff <em>shape</em>, run-<em>trace</em> behavior, cross-seed <em>agreement</em> — evaluated with risk–coverage analysis and bootstrap CIs; (3) an honest result: the signals rank correctness (AUROC up to 0.840) but do not yield a high-precision accept gate at ~11 positives; (4) a released dataset of 1,032 labeled agent runs.</p>
+
+<h2>2. Related Work</h2>
+<p><em class="tag">Selective prediction.</em> The reject option dates to Chow (1970); El-Yaniv &amp; Wiener (2010) formalized the risk–coverage trade-off; Geifman &amp; El-Yaniv (2017, NeurIPS) applied softmax-response thresholding; SelectiveNet (2019, ICML) learned a reject head. We adopt their coverage/selective-risk definitions and report E-AURC because, at an 8.7% base rate, raw AURC is dominated by irreducible error.</p>
+<p><em class="tag">Confidence &amp; calibration for code.</em> Verbalized confidence (Tian et al. 2023; Xiong et al. 2024) and entropy methods (Kuhn et al. 2023; Farquhar et al. 2024) estimate reliability, but Spiess et al. (ICSE 2025) show token probabilities are poorly calibrated for code — at &gt;90% confidence only ~52% of completions pass — motivating behavioral signals over logits.</p>
+<p><em class="tag">Self-consistency.</em> Self-consistency (Wang et al. 2022) and execution-agreement selection (CodeT, Chen et al. 2022; AlphaCode, Li et al. 2022) use agreement to <em>select</em> a candidate; we use cross-seed agreement as an <em>abstention</em> signal, heeding that consensus can be confidently wrong.</p>
+<p><em class="tag">Verifiers &amp; resampling limits.</em> Trained verifiers (Cobbe et al. 2021; Lightman et al. 2023; LEVER, Ni et al. 2023; Coder-Reviewer, Zhang et al. 2022) need large labeled data — infeasible with 11 positives. Stroebl et al. (2024) show an imperfect verifier imposes a false-positive floor resampling cannot cross — support for abstaining over sampling harder.</p>
+<p><em class="tag">SWE agents.</em> SWE-bench (Jimenez et al. 2024), SWE-agent (Yang et al. 2024), Agentless (Xia et al. 2024) define the task; SWE-Bench+ (Aleithan et al. 2024) shows many &ldquo;plausible&rdquo; patches are wrong or test-gaming.</p>
+<p><em class="tag">Closest prior art (author-verified).</em> EarlyEval (Shi et al.) predicts agent outcome from trajectory prefixes — but for cheap <em>evaluation</em>, large models, not abstention. The Draft-Model Gate (Grotov &amp; Malykh) gates an agent via token likelihood and <em>vetoes</em>; we use behavioral + cross-seed signals and frame <em>deferral</em>. &ldquo;Coding Agents Don't Know When to Act&rdquo; (Gloaguen et al.) abstains on <em>whether to act</em>, not patch-correctness. BouncerBench (Mathews &amp; Nagappan) and Abstain-and-Validate (Cambronero et al.) use LLM judges; Task Abstention (Zhou et al.) gives a distribution-free guarantee for function-level generation. We found no prior work combining risk–coverage/E-AURC + a whole-patch unit + a small quantized <em>local</em> model + behavioral trace signals + cross-seed self-consistency + an existing-tests gate + a released trace dataset.</p>
+
+<h2>3. Experimental Setup</h2>
+<p><em class="tag">Model &amp; harness.</em> Gemma&nbsp;4&nbsp;E4B (<code>gemma-4-e4b-it-qat-w4a16-ct</code>), served locally via vLLM (bf16, 4×L4) in the Kaggle Gemma&nbsp;4 Developer Agent harness. Sampling fixed (temperature 1.0, top-p 0.95, top-k 64); only the seed varies, so the eight samples are exchangeable. Budget: 10&nbsp;min / 40 tool calls per task.</p>
+<p><em class="tag">Tasks.</em> 129 tasks over four Python repos — Textualize/rich, encode/httpx, fastapi/fastapi, psf/requests (ids like <code>fastapi_15661</code>). SWE-bench-<em>style</em>, <b>not</b> the SWE-bench dataset; we do not compare to SWE-bench leaderboard numbers.</p>
+<p><em class="tag">Runs.</em> 8 seeds × 129 = 1,032 runs (~1.5 GPU-h each; 12.2 total). Label-leaking fields (<code>resolved</code>, <code>test_exit_code</code>, <code>error</code>, <code>duration_seconds</code>) are excluded from features; traces are recorded before the hidden test, so trace features are safe.</p>
+<p><em class="tag">Degenerate-task exclusion.</em> Two tasks (<code>fastapi_14077</code>, <code>fastapi_14851</code>) are &ldquo;resolved&rdquo; by an empty patch — the hidden test passes with no edit. These do not demonstrate repair, so we drop them, leaving 127 tasks / 1,016 runs. Removing them in fact strengthens the signal.</p>
+
+<h2>4. Method</h2>
+<p><em class="tag">Unit &amp; metrics.</em> The unit is the task: ship one patch (seed 0, or the medoid) and accept or abstain. Coverage = accepted / 127 (empty patches always abstain); precision = resolved among accepted; selective risk = 1 − precision. We report AUROC, the risk–coverage curve, E-AURC, and operating points at target precisions, each with 2,000-sample bootstrap CIs. Thresholds are <em>oracle</em> (upper bound) and <em>held-out</em> (deployable).</p>
+<p><em class="tag">Signal families.</em> (a) <em>Shape</em>: files touched, lines added/removed/changed, edit regions, new files, non-Python edits. (b) <em>Trace</em>: tool-call/step counts, reads/edits/graph-queries, tool errors, whether tests were run (and after the last edit) and their outcome, tokens, wall-time. (c) <em>Agreement</em>: cross-seed patch consistency, computed leave-one-out (a sample's agreement excludes itself). Logistic models per family and union, 5-fold stratified CV and leave-one-repo-out.</p>
+
+<h2>5. Results</h2>
+<p><em class="tag">Resolution is seed-dependent.</em> Per seed ~11/127 (8.7%). Resolved-in-exactly-<i>k</i> seeds: {0:110, 1:5, 2:3, 3:1, 4:1, 5:1, 6:1, 7:3, 8:2}: <b>17/127 solve on ≥1 seed, only 2 on all eight.</b> The agent is unstable at the edge of its ability — the variance that makes agreement informative.</p>
+<table>
+<tr><th>Feature family</th><th>AUROC</th><th>95% CI</th></tr>
+<tr><td>patch size only</td><td>0.614</td><td>[0.461, 0.773]</td></tr>
+<tr><td>shape</td><td>0.711</td><td>[0.583, 0.829]</td></tr>
+<tr><td>trace</td><td>0.738</td><td>[0.580, 0.885]</td></tr>
+<tr><td><b>agreement (cross-seed)</b></td><td><b>0.840</b></td><td><b>[0.745, 0.924]</b></td></tr>
+<tr><td>shape + trace</td><td>0.744</td><td>[0.593, 0.877]</td></tr>
+<tr><td>all</td><td>0.799</td><td>[0.653, 0.922]</td></tr>
+</table>
+<p>Cross-seed agreement is strongest (lower CI bound 0.745, clear of chance); patch size alone is weakest. Correct patches use fewer steps (median 7 vs 10 tool calls) and smaller diffs in the tail (wrong-patch mean 4,396 vs 660 characters).</p>
+
+<figure>
+<img src="fig_risk_coverage.svg" alt="risk-coverage curves">
+<figcaption>Figure 1. Risk–coverage curves (127 tasks, 8 seeds). Agreement dominates; all families sit above the 0.087 base rate; curves collapse to the base rate as coverage → 1.</figcaption>
+</figure>
+
+<h3>Sample budget</h3>
+<p>Agreement is the one family needing multiple samples (a deployer pays k× inference): agreement AUROC rises <b>0.662 (k=2) → 0.813 (k=4) → 0.840 (k=8)</b>, while all-features is already strong at k=2 (0.754). k=4 captures most of the agreement signal.</p>
+<h3>Deployable accept gate (held-out)</h3>
+<ul>
+<li>Target 0.9: coverage 0 for every family; oracle coverage@0.9 = 0 — unreachable.</li>
+<li>Target 0.5: unreliable (coverage near 0).</li>
+<li>Target 0.3: <b>agreement accepts 14.2% at 33.3% precision; all-features 7.9% at 30.0%</b> — ≈3.5–3.8× the 8.7% base rate, meeting the target.</li>
+</ul>
+<h3>Robustness</h3>
+<p>(i) Shipping the medoid instead of seed 0 keeps most families similar (all 0.733, shape+trace 0.748) but lowers agreement to 0.733 — the medoid policy consumes part of the consensus; agreement is strongest shipping one sample (0.840). (ii) Leave-one-repo-out: AUROC falls to 0.71–0.73 (agreement 0.715 [0.574, 0.851]) and the gate degrades (coverage ≤0.06) — the signal transfers in rank, a precise cross-repo gate does not.</p>
+
+<h3>5.1 Adversarial: consistency is not correctness</h3>
+<p>Clustering the eight per-task patches, 14 tasks have a modal patch shared by ≥4 of 8 seeds; <b>only 5 ever resolve — 9 are consistent-but-never-correct.</b> The extreme case is <code>fastapi_14953</code>: all eight seeds emit the identical patch and it is wrong on all eight. Agreement is informative on average (modal-cluster 2.8 seeds for solvable vs 1.5 for never-resolved) but <b>necessary, not sufficient</b> — hence pairing it with existing tests and treating it as grounds to abstain on disagreement, not accept on agreement.</p>
+
+<h3>5.2 Why E4B fails: a failure-mode taxonomy</h3>
+<p>Categorizing the 116 seed-0 failures by dominant mode (trace + patch heuristics; localization inferred, not gold-labeled): <b>tested-but-unresolved 55.2%, never-tested 18.1%, broken-edits 9.5%, empty-patch 8.6%, budget/context 6.9%, wrong-file 0.9%, scattershot 0.9%</b> — stable across all eight seeds (the two verification modes together ~65&ndash;70% every seed). No failed task ignored a clean red test: of the 64 tested-but-unresolved, 21 passed a too-weak local test and 43 ran a test that errored; 62/64 submitted after a test ran. A <b>verification gap, not laziness</b>. Failed runs flail longer (median 9.5 vs 6 tool calls, 12 vs 8 LLM calls, 4 vs 2 files read), verify less (ran a test after the last edit 63% vs 82%), and submit larger patches (739 vs 553 bytes). ~3 of 4 failures are verification failures the trace records directly &mdash; so &ldquo;ran a test after the last edit and it cleanly passed&rdquo; is exactly the unlabeled feature the abstention head reads. The taxonomy explains <em>why</em> the behavioral signal has power.</p>
+
+<h2>6. Small + large complementarity (and an honest negative on compute)</h2>
+<p>The 12B model on the same 127 tasks (one seed; ~2.4× slower, 97 s/task, errored on 94 tasks exceeding the time budget — its 17 resolves are a lower bound) solves <em>different</em> bugs: 9 only-12B, 9 only-E4B-union, 8 both; <b>union 22/127, above either alone.</b> A compute-saving cascade does <b>not</b> materialize: because E4B confidently accepts almost nothing, routing its non-accepted tasks defers ~116/127, costing ~132% of running the 12B on everything. The deferral signal buys coverage/complementarity, not compute savings, at this model scale.</p>
+
+<h2>7. Limitations &amp; Conclusion</h2>
+<p>With 11 positives, intervals are wide; results are for one quantized model on one 127-task harness and may not transfer. The gate can be gamed. We caught and excluded two degenerate empty-patch tasks and recommend an empty-patch audit for SWE-bench-style harnesses.</p>
+<p>Behavioral and cross-seed-agreement signals carry real information about patch correctness (agreement AUROC 0.840), but at realistic data scales they make a <em>ranking</em> signal, not an autonomous high-precision accept gate, and — because the small model keeps so little — not a compute-saving cascade. What they yield is a measured abstention curve and a small/large <em>complementarity</em> result (union 22 &gt; max 17). We are explicit about the main threat: with 11–18 positives on a 129-task harness every estimate carries wide intervals, and the first follow-up priority is simply more labeled tasks. We release the 1,032-run labeled dataset (two degenerate tasks flagged) under Apache-2.0.</p>
+
+<h2>References</h2>
+<div class="refs">
+<p>Chow, C. (1970). On optimum recognition error and reject tradeoff. <i>IEEE Trans. Information Theory</i>. DOI 10.1109/TIT.1970.1054406.</p>
+<p>El-Yaniv, R. &amp; Wiener, Y. (2010). On the foundations of noise-free selective classification. <i>JMLR</i> 11.</p>
+<p>Geifman, Y. &amp; El-Yaniv, R. (2017). Selective Classification for Deep Neural Networks. <i>NeurIPS</i>. arXiv:1705.08500.</p>
+<p>Geifman, Y. &amp; El-Yaniv, R. (2019). SelectiveNet: A Deep Neural Network with an Integrated Reject Option. <i>ICML</i>. arXiv:1901.09192.</p>
+<p>Geifman, Y., Uziel, G. &amp; El-Yaniv, R. (2019). Bias-Reduced Uncertainty Estimation for Deep Neural Classifiers. <i>ICLR</i>. arXiv:1805.08206.</p>
+<p>Tian, K. et al. (2023). Just Ask for Calibration. <i>EMNLP</i>. arXiv:2305.14975.</p>
+<p>Xiong, M. et al. (2024). Can LLMs Express Their Uncertainty? <i>ICLR</i>. arXiv:2306.13063.</p>
+<p>Kuhn, L. et al. (2023). Semantic Uncertainty. <i>ICLR</i>. arXiv:2302.09664.</p>
+<p>Farquhar, S. et al. (2024). Detecting hallucinations using semantic entropy. <i>Nature</i> 630:625–630.</p>
+<p>Spiess, C. et al. (2024). Calibration and Correctness of Language Models for Code. arXiv:2402.02047 (ICSE 2025).</p>
+<p>Wang, X. et al. (2022). Self-Consistency Improves Chain of Thought Reasoning. <i>ICLR 2023</i>. arXiv:2203.11171.</p>
+<p>Chen, B. et al. (2022). CodeT: Code Generation with Generated Tests. arXiv:2207.10397.</p>
+<p>Li, Y. et al. (2022). Competition-Level Code Generation with AlphaCode. <i>Science</i> 378:1092–1097.</p>
+<p>Cobbe, K. et al. (2021). Training Verifiers to Solve Math Word Problems. arXiv:2110.14168.</p>
+<p>Lightman, H. et al. (2023). Let's Verify Step by Step. arXiv:2305.20050.</p>
+<p>Ni, A. et al. (2023). LEVER: Learning to Verify Language-to-Code Generation with Execution. arXiv:2302.08468.</p>
+<p>Zhang, T. et al. (2022). Coder Reviewer Reranking for Code Generation. arXiv:2211.16490.</p>
+<p>Stroebl, B. et al. (2024). The Limits of Inference Scaling Through Resampling. arXiv:2411.17501.</p>
+<p>Jimenez, C. E. et al. (2024). SWE-bench: Can Language Models Resolve Real-World GitHub Issues? <i>ICLR</i>. arXiv:2310.06770.</p>
+<p>Yang, J. et al. (2024). SWE-agent: Agent-Computer Interfaces Enable Automated Software Engineering. <i>NeurIPS</i>. arXiv:2405.15793.</p>
+<p>Xia, C. S. et al. (2024). Agentless: Demystifying LLM-based Software Engineering Agents. arXiv:2407.01489.</p>
+<p>Aleithan, R. et al. (2024). SWE-Bench+: Enhanced Coding Benchmark for LLMs. arXiv:2410.06992.</p>
+<p>Shi, Y. et al. EarlyEval: Cheaper Agent Evaluation via Early Outcome Prediction. arXiv:2609.02783.</p>
+<p>Grotov, K. &amp; Malykh, V. How to Speculate about Uncertainty in Agentic Coding? A Draft-Model Gate Method. arXiv:2609.05274.</p>
+<p>Gloaguen, T. et al. Coding Agents Don't Know When to Act. arXiv:2605.07769.</p>
+<p>Mathews, N. S. &amp; Nagappan, M. Is Your Automated Software Engineer Trustworthy? (BouncerBench). arXiv:2506.17812.</p>
+<p>Cambronero, J. et al. Abstain and Validate: A Dual-LLM Policy for Reducing Noise in Agentic Program Repair. arXiv:2510.03217.</p>
+<p>Zhou, Y. et al. Task Abstention for Large Language Models in Code Generation. arXiv:2605.17029.</p>
+</div>
+
+</body>
+</html>
