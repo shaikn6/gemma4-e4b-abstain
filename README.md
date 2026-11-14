@@ -79,3 +79,6 @@ small model confidently accepts so little, routing does not save compute at this
 ## License
 
 Apache-2.0. Built for the Gemma 4 Developer Agent paper track. No personal data.
+
+---
+<sub>Part of [Nagizaaz Shaik's open-source work](https://github.com/shaikn6) · [all repositories](https://github.com/shaikn6?tab=repositories)</sub>
