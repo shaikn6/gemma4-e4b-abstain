@@ -11,16 +11,16 @@ Small local code agents produce a patch for almost every bug but fix few of them
 - **Label.** `resolved` (bool) = the hidden test passed. 66/1016 E4B rows resolved (~6.5%); 11/127 tasks resolve on the seed-0 run, 17/127 on ≥1 of 8 seeds.
 - **Features (37, all non-leaky).** Diff *shape* (files_touched, lines_added/removed/changed, edit_regions, new_files, touches_non_py, patch_empty), run *trace* (tool_calls, llm_calls, n_edits/reads/graph_calls, n_tool_errors, ran_tests, ran_tests_after_last_edit, last_test_passed/n_passed/n_failed, n_submits, n_nudges, budget_refused, prompt/completion/reasoning tokens, agent_seconds, trace_agent_steps), and cross-seed *agreement* (agree_lines/content/files/exact, k_samples, k_nonempty) computed leave-one-out (a sample's agreement excludes itself).
 - **Excluded.** Label-leaking fields (`test_exit_code`, `error`, `duration_seconds`, raw `resolved` is kept only as the label column). Two degenerate tasks (`fastapi_14077`, `fastapi_14851`) whose hidden test passes with an empty patch are removed.
-- Raw per-run `traces/` (SessionTrace JSON) and `patches/` are included so others can derive new features.
+- Raw per-run `traces/` (SessionTrace JSON) and `patches/` are **not** included in this release (too large); only the derived features above are.
 
 ## Collection
 Runs produced by the Kaggle Gemma 4 Developer Agent harness on 4×L4 GPUs, vLLM-served, fixed sampling (temperature 1.0, top_p 0.95, top_k 64), budget 10 min / 40 tool calls per task; only the random seed varies across the 8 E4B samples. Labels are the harness's own hidden-test outcomes. No human annotation.
 
 ## Preprocessing
-`signals.py` parses each patch and trace into the 37 features (leave-one-out agreement across the per-task seed set). `features8_clean.jsonl` is the analysis file (degenerate tasks removed). Scripts (`signals.py`, `risk_coverage.py`) are included and reproduce every number in the paper.
+`signals.py` parses each patch and trace into the 37 features (leave-one-out agreement across the per-task seed set). `features8_clean.jsonl` is the analysis file (degenerate tasks removed). Scripts (`signals.py`, `risk_coverage.py`) are included; `risk_coverage.py` reproduces every ranking number in the paper from `features8_clean.jsonl`.
 
 ## Uses
 Selective prediction / abstention for code agents; correctness prediction from behavior; small-vs-large complementarity; agreement-as-confidence studies. **Not** a general code-repair training set and **not** representative of SWE-bench; the task count is small (wide confidence intervals) and the repo mix is skewed.
 
 ## Distribution & maintenance
-Files: `features8_clean.jsonl`, `features_12b.jsonl`, `traces/`, `patches/`, `signals.py`, `risk_coverage.py`, this datasheet. Apache-2.0. Versioned with the paper; the first follow-up is more labeled tasks to narrow the intervals.
+Files: `features8_clean.jsonl`, `features_12b.jsonl`, `signals.py`, `risk_coverage.py`, this datasheet. Apache-2.0. Versioned with the paper; the first follow-up is more labeled tasks to narrow the intervals.
