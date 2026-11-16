@@ -99,8 +99,8 @@ accepts so little, routing does not save compute at this scale.
 
 ### Corrections to the paper draft
 
-Checked against the committed feature files; the PDF/HTML in `paper/` are the submitted version
-and are left unchanged.
+Checked against the committed feature files. The paper files in `paper/` (draft, PDF and HTML)
+are left unchanged, so these three points apply to all of them.
 
 - "Resolves 11 (8.7%) per seed": 11 is seed 0. Per-seed counts are 11, 10, 8, 6, 7, 8, 7, 9
   (66 of 1,016 runs, 6.5%). The ranking numbers score the shipped seed-0 patch of each task (`resolved=11`).
