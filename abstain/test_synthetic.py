@@ -10,6 +10,7 @@ import json
 import math
 import sys
 import tempfile
+import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # -I drops the script dir
@@ -158,6 +159,8 @@ def test_trace_features_atif():
 def _check_real_trace(instance_id, counted, refused):
     path = (Path(__file__).resolve().parent.parent / 'ref/starter_traces/results/traces'
             / f'trace_{instance_id}.json')
+    if not path.exists():  # raw starter traces are not committed; skip, do not fail CI
+        raise unittest.SkipTest(f'real trace not committed: {path}')
     trace = json.loads(path.read_text(encoding='utf-8'))
     ev = sg.extract_events(trace)
     f = sg.trace_features(trace)
@@ -343,13 +346,16 @@ def test_empty_patch_never_accepted():
 
 if __name__ == '__main__':
     tests = [(k, v) for k, v in sorted(globals().items()) if k.startswith('test_') and callable(v)]
-    failed = 0
+    failed = skipped = 0
     for name, fn in tests:
         try:
             fn()
             print(f'PASS {name}')
+        except unittest.SkipTest as e:  # missing optional fixture, not a failure
+            skipped += 1
+            print(f'SKIP {name}: {e}')
         except Exception as e:  # report every failure, then exit non-zero
             failed += 1
             print(f'FAIL {name}: {type(e).__name__}: {e}')
-    print(f'{len(tests) - failed}/{len(tests)} passed')
+    print(f'{len(tests) - failed - skipped}/{len(tests)} passed, {skipped} skipped')
     sys.exit(1 if failed else 0)
