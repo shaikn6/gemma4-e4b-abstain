@@ -7,7 +7,8 @@
 A small, locally-runnable code agent writes a patch for almost every bug it sees and fixes
 almost none of them. Running Google's **Gemma 4 E4B** (4-bit quantized, served locally) as an
 autonomous agent on a 127-task SWE-bench-*style* harness, it produces a non-empty patch on
-115 of 129 tasks but resolves only ~11 per seed (8.7%). It is, precisely, *confidently wrong*.
+115 of 129 tasks but resolves only 11 of 127 on seed 0 (8.7%; between 6 and 11 across the eight
+seeds). It is, precisely, *confidently wrong*.
 
 This repo asks a selective-prediction question: **can the agent tell its good patches from its
 bad ones using only signals it can compute itself** — the shape of the diff, its own run trace,
@@ -92,8 +93,23 @@ do not compare to its leaderboard). With ~11 positives the confidence intervals 
 every AUROC is reported with a 95% CI (the held-out coverage/precision operating points are
 single-split point estimates, not interval estimates). Two degenerate tasks whose hidden test passes with an empty
 patch are excluded and flagged. The agreement gate can be gamed by a consistently-wrong agent.
-The E4B and 12B models solve *different* bugs (union 22/127 > either alone), but because the
-small model confidently accepts so little, routing does not save compute at this scale.
+The E4B and 12B models solve *different* bugs (E4B seed 0 resolves 11, the 12B 17, their union
+22/127; with all eight E4B seeds the union is 26), but because the small model confidently
+accepts so little, routing does not save compute at this scale.
+
+### Corrections to the paper draft
+
+Checked against the committed feature files; the PDF/HTML in `paper/` are the submitted version
+and are left unchanged.
+
+- "Resolves 11 (8.7%) per seed": 11 is seed 0. Per-seed counts are 11, 10, 8, 6, 7, 8, 7, 9
+  (66 of 1,016 runs, 6.5%). The ranking numbers score the shipped seed-0 patch of each task (`resolved=11`).
+- The complementarity paragraph pairs "9 only-12B, 9 only-E4B-union, 8 both" with "union 22".
+  Those three counts describe the eight-seed E4B union, whose union with the 12B is 26. The 22
+  is E4B seed 0 with the 12B (11 only-12B, 5 only-E4B, 6 both).
+- The paper describes a released set of 1,032 runs with traces and patches. This repo releases
+  the 1,016 analysis rows (`features8_clean.jsonl`) and the 127 12B rows; the 1,032-row
+  `features8.jsonl` and the raw traces/patches are not committed.
 
 ## License
 
