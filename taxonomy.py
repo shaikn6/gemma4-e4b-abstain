@@ -10,7 +10,6 @@ Run: ~/.venvs/ntl/bin/python3 -I taxonomy.py
 import json
 import os
 import re
-import glob
 import statistics as st
 from collections import Counter, defaultdict
 

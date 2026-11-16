@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install numpy scikit-learn pytest ruff
+      - name: Lint
+        run: ruff check .
+      - name: Test
+        run: pytest -q
+      - name: Reproduce paper ranking numbers
+        run: |
+          python -I abstain/risk_coverage.py --features dataset/features8_clean.jsonl --out rc.json --target 0.3 | tee rc.txt
+          grep -q "agreement        cv5 AUROC 0.840 \[0.745,0.924\]  heldout cov 0.142 prec 0.333" rc.txt

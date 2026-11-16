@@ -1,5 +1,7 @@
 # gemma4-e4b-abstain
 
+[![ci](https://github.com/shaikn6/gemma4-e4b-abstain/actions/workflows/ci.yml/badge.svg)](https://github.com/shaikn6/gemma4-e4b-abstain/actions/workflows/ci.yml)
+
 > **Teaching a small local Gemma code agent to say "not sure" and skip the patch instead of breaking your repo (paper + code + data).**
 
 A small, locally-runnable code agent writes a patch for almost every bug it sees and fixes
@@ -15,8 +17,14 @@ and how far its patches agree across repeated seeds — without ever seeing the 
 **AUROC 0.840** (95% CI [0.745, 0.924]); patch size alone is near chance (0.614). But at ~11
 positives this makes a *ranking* signal, not a high-precision autonomous accept gate: a
 90%-precision gate is unreachable, while a moderate 30%-precision target accepts 14.2% of tasks
-at 33.3% precision (≈3.8× the base rate). Consistency is **necessary, not sufficient** — on one
-task all eight seeds emit the identical patch and it is wrong on all eight.
+at 33.3% precision — 6 of the 18 accepted patches are correct, ≈3.8× the 8.7% base rate.
+Consistency is **necessary, not sufficient** — on one task all eight seeds emit the identical
+patch and it is wrong on all eight.
+
+This is the only repo here that applies abstention to an *autonomous code agent*: where
+[`fin-lora`](https://github.com/shaikn6/fin-lora) gates a sentiment classifier on its own
+logits, this one asks whether an agent can withhold a whole patch using only signals it computes
+about its own run — diff shape, run trace, cross-seed agreement — never the hidden test.
 
 ## What's here
 
@@ -43,7 +51,7 @@ python -m venv .venv && source .venv/bin/activate && pip install numpy scikit-le
 python -I abstain/risk_coverage.py --features dataset/features8_clean.jsonl --out rc.json --target 0.3
 ```
 
-Expected (verified):
+Expected (reproduced now, byte-for-byte, from the committed feature files):
 
 ```
 tasks=127 resolved=11 base_rate=0.087
@@ -55,11 +63,21 @@ shape+trace      cv5 AUROC 0.744 [0.593,0.877]  heldout cov 0.063 prec 0.125
 all              cv5 AUROC 0.799 [0.653,0.922]  heldout cov 0.079 prec 0.300
 ```
 
-Tests: `python -I abstain/test_synthetic.py` (also runs under `pytest`).
+Every number in that block is **reproduced now** from the committed data. The paper's
+*intake* counts — 115/129 non-empty patches, 12/129 resolved before excluding the two
+degenerate tasks — are **recorded** figures: they come from the raw agent runs, which are not
+committed, so this repo cannot re-derive them.
+
+Tests: `pytest -q` runs the full suite (`abstain/test_synthetic.py` +
+`abstain/test_analysis.py`); locally **24 tests, 22 pass and 2 skip** (the two skips need the
+uncommitted starter traces). Each file also runs standalone, e.g.
+`python -I abstain/test_synthetic.py`.
 
 Rebuilding features from scratch with `abstain/signals.py` needs the raw per-run `traces/` and
-`patches/`, which are large and not committed here; the feature files above are the released
-analysis inputs.
+`patches/`, which are large and not committed here; likewise `abstain/task_analysis.py` needs
+`data/tasks.jsonl` and `taxonomy.py` needs a local SWE-agent run directory. The committed
+feature files are the released analysis inputs, and the tests exercise these scripts on
+synthetic data instead.
 
 ## Signal families
 
@@ -71,7 +89,8 @@ analysis inputs.
 
 One quantized model on one 127-task SWE-bench-*style* harness (**not** the SWE-bench dataset;
 do not compare to its leaderboard). With ~11 positives the confidence intervals are wide, and
-every number is reported with a CI. Two degenerate tasks whose hidden test passes with an empty
+every AUROC is reported with a 95% CI (the held-out coverage/precision operating points are
+single-split point estimates, not interval estimates). Two degenerate tasks whose hidden test passes with an empty
 patch are excluded and flagged. The agreement gate can be gamed by a consistently-wrong agent.
 The E4B and 12B models solve *different* bugs (union 22/127 > either alone), but because the
 small model confidently accepts so little, routing does not save compute at this scale.
