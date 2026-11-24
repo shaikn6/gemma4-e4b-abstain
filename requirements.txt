@@ -1,0 +1,4 @@
+numpy==2.5.5
+scikit-learn==1.9.1
+pytest==9.2.0
+ruff==0.17.6
